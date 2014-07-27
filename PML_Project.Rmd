@@ -1,0 +1,97 @@
+## Practical Machine Learning Course Project
+============================================================
+### Michael Shipman - June 22, 2014
+
+## Data Sourcing and Processing
+The training and testing datasets were loaded directly from the cloudfront.net URL given in the assignement instructions.
+```{r}
+sourcetrain <- read.csv("pml-training.csv", header = TRUE)
+sourcetest <- read.csv("pml-testing.csv", header = TRUE)
+```
+The structure of the source (raw) datasets were observed to have many statistical summary variables that would not contribute well to the prediction algorithms, such as min, max, average, kertosis, skewness, etc. The source training and testing data sets were conditioned by removing the statistical summary variables and checked to remove any rows with "NA" data entries. Further conditioning is performed to remove the "raw timestamps" part 1 and 3, This will produce 'tidy' datasets to work with while fitting and testing the data.
+```{r}
+#Create a matching vector of character strings that pertain to summary statistics phases.
+match <- c("kurtosis", "skewness", "max", "min", "amplitude", "var", "avg", "stddev")
+#Create a vector of variables to remove that contain summary statistics. 
+removeVar <- names(sourcetrain)[grep(paste(match, collapse="|"), names(sourcetrain))]
+#Remove the statistical summary variables from the source training and testing datasets.
+train <- sourcetrain[ ,!(names(sourcetrain) %in% removeVar)]
+test <- sourcetest[ ,!(names(sourcetest) %in% removeVar)]
+#Ensure that all the data rows are complete (w/o "NA")
+train <- train[complete.cases(train), ]
+test <- test[complete.cases(test), ]
+```
+The training dataset was split into 75% / 25% training and validation dataset to fine tune the model.
+```{r}
+set.seed(28462)
+split <- sample(1:dim(train)[1], 
+                size=dim(train)*0.75,
+                replace=F)
+train <- train[split,]
+val <- train[-split,]
+```
+
+##Selection and Training the Machine Learning Algorith Using Training Data
+When the data sets were conditioned into 'tidy' format, the next step was to select a model to fit to the training data set. The output variable is a categorical variable listed from A to E corresponding to the excersize type being performed while the input variables were being measured. A Characterization and Regression Tree (CART) model was chosen based on the muliple discrete outcomes of the output variable.  The CART model will produce a decision tree based on the input variables run through the algorithm. The 'rpart' algorithm in the Caret package was used as the first model to fit.  A random number generator seed of 28462 was chosen and reset each time a new training algorithm was begun.
+```{r}
+library(caret)
+set.seed(28462)
+#Calls the rpart model and fits to the conditioned training dataset.
+fit <- rpart(classe ~ .,
+               method = "class",
+               data = train)
+```
+The descision tree final model is shown in the output and graphics below.
+```{r}
+#displays model fitting
+fit
+#displays the decision tree model graphically.
+library(rattle)
+fancyRpartPlot(fit, main = "Fit Using rpart Algorithm on Training Dataset")
+```
+
+##Predicting the Excersize Outcome Using Validation Data
+The CART model decision tree is then fit to the training dataset to see the accuracy of the model.  A confusion matrix is set up to show the accuracy of the predicted vs. the actual excersize class.
+```{r}
+#Create a column of predicted values in the validation data set.
+val$Pred <- predict(fit, newdata = val, type = "class")
+#Produce a comparison using confusion matrix function.
+confusionMatrix(val$Pred, val$classe)
+```
+
+##Cross Validation By Training the Model with Validation Data
+With an accuracy of 100% and Kappa = 1, the model shows that there is a very good chance of overfitting using the 'rpart' algorithm.  A cross validation was performed using the validation data set then checking the results using the training dataset.
+```{r}
+set.seed(28462)
+#Remove the Pred column from the val dataset before training.
+val <- val[-61]
+#Calls the rpart model and fits to the conditioned training dataset.
+fit2 <- rpart(classe ~ .,
+               method = "class",
+               data = val)
+```
+The second CART descision tree final model is shown in the output and graphics below.
+```{r}
+#displays model fitting
+fit2
+#displays the decision tree model graphically.
+fancyRpartPlot(fit2, main = "Fit2 Using rpart Algorithm on Validation Dataset")
+```
+The CART model decision tree is then fit to the training dataset to see the accuracy of the model.  A confusion matrix is set up to show the accuracy of the predicted vs. the actual excersize class.
+```{r}
+#Create a column of predicted values in the training data set.
+train$Pred <- predict(fit2 , newdata = train, type = "class")
+#Produce a comparison using confusion matrix function.
+confusionMatrix(train$Pred, train$classe)
+```
+The accuracy is still very close to 100% given the cross validation of the validation data fit to model.
+
+##Predicting the Test Outcomes Using the Model.
+The prediction of the test dataset outcomes was fit to the model and shown in the final table
+```{r}
+#Create a column of predicted values in the testing data set.
+test$Pred <- predict(fit, newdata = test, type = "class")
+#Produce a table showing the outcomes of the 20 test cases.
+subset(test, select = c(user_name, Pred))
+```
+
